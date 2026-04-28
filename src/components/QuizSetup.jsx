@@ -21,7 +21,7 @@ export default function QuizSetup({ onStart, onCancel }) {
     <section className="setup">
       <h2 className="section-title">Choose your practice</h2>
       <p className="section-sub">
-        Pick a length. Questions and answer choices are randomized every attempt.
+        Pick a length. Question order and answer choices are randomized every attempt.
       </p>
 
       <div className="length-grid">

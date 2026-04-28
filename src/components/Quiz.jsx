@@ -96,9 +96,10 @@ export default function Quiz({ config, onFinish, onQuit }) {
           correct,
           total,
           dateString,
+          history,
         });
       } else {
-        recordQuizResult({ score: finalScore, correct, total });
+        recordQuizResult({ score: finalScore, correct, total, history });
       }
 
       onFinish(result);

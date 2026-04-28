@@ -12,6 +12,7 @@ const DEFAULT_STATE = {
   lastDailyDate: null, // YYYY-MM-DD
   lastDailyResult: null, // { score, correct, total, date }
   knownFlashcards: [], // ids
+  topicStats: {}, // { [topic]: { correct, total } }
 };
 
 function safeStorage() {
@@ -52,22 +53,38 @@ export function updateState(updater) {
   return next;
 }
 
-export function recordQuizResult({ score, correct, total }) {
+export function recordQuizResult({ score, correct, total, history = [] }) {
   return updateState((s) => ({
     ...s,
     bestScore: Math.max(s.bestScore, score),
     totalQuizzes: s.totalQuizzes + 1,
     totalQuestions: s.totalQuestions + total,
     totalCorrect: s.totalCorrect + correct,
+    topicStats: mergeTopicStats(s.topicStats, history),
   }));
+}
+
+function mergeTopicStats(prev, history) {
+  const next = { ...prev };
+  for (const h of history) {
+    const t = h.question?.topic;
+    if (!t) continue;
+    const cur = next[t] || { correct: 0, total: 0 };
+    next[t] = {
+      correct: cur.correct + (h.isCorrect ? 1 : 0),
+      total: cur.total + 1,
+    };
+  }
+  return next;
 }
 
 // Increment streak only when the previous daily was completed yesterday.
 // Resets to 1 if there's a gap; stays the same if user already played today.
-export function recordDailyCompletion({ score, correct, total, dateString }) {
+export function recordDailyCompletion({ score, correct, total, dateString, history = [] }) {
   return updateState((s) => {
     let streak = s.dailyStreak;
-    if (s.lastDailyDate === dateString) {
+    const alreadyToday = s.lastDailyDate === dateString;
+    if (alreadyToday) {
       // already played today — do not double count
     } else if (isYesterday(s.lastDailyDate, dateString)) {
       streak = (s.dailyStreak || 0) + 1;
@@ -77,9 +94,10 @@ export function recordDailyCompletion({ score, correct, total, dateString }) {
     return {
       ...s,
       bestScore: Math.max(s.bestScore, score),
-      totalQuizzes: s.lastDailyDate === dateString ? s.totalQuizzes : s.totalQuizzes + 1,
-      totalQuestions: s.lastDailyDate === dateString ? s.totalQuestions : s.totalQuestions + total,
-      totalCorrect: s.lastDailyDate === dateString ? s.totalCorrect : s.totalCorrect + correct,
+      totalQuizzes: alreadyToday ? s.totalQuizzes : s.totalQuizzes + 1,
+      totalQuestions: alreadyToday ? s.totalQuestions : s.totalQuestions + total,
+      totalCorrect: alreadyToday ? s.totalCorrect : s.totalCorrect + correct,
+      topicStats: alreadyToday ? s.topicStats : mergeTopicStats(s.topicStats, history),
       dailyStreak: streak,
       lastDailyDate: dateString,
       lastDailyResult: { score, correct, total, date: dateString },
