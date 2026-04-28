@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import Sidebar from './components/Sidebar.jsx';
 import Home from './components/Home.jsx';
 import QuizSetup from './components/QuizSetup.jsx';
 import Quiz from './components/Quiz.jsx';
@@ -18,16 +19,25 @@ const VIEWS = {
   STATS: 'stats',
 };
 
+const TITLES = {
+  home: 'Overview',
+  setup: 'Practice',
+  quiz: 'Practice',
+  results: 'Results',
+  daily: 'Daily Challenge',
+  flashcards: 'Flashcards',
+  stats: 'Stats',
+};
+
 export default function App() {
   const [view, setView] = useState(VIEWS.HOME);
   const [stats, setStats] = useState(loadState());
   const [quizConfig, setQuizConfig] = useState(null);
   const [lastResult, setLastResult] = useState(null);
+  const [navOpen, setNavOpen] = useState(false);
 
   useEffect(() => {
-    if (view === VIEWS.HOME || view === VIEWS.STATS) {
-      setStats(loadState());
-    }
+    setStats(loadState());
   }, [view]);
 
   function startPractice(config) {
@@ -41,90 +51,102 @@ export default function App() {
     setView(VIEWS.RESULTS);
   }
 
+  function handleNav(target) {
+    if (target === 'home') setView(VIEWS.HOME);
+    else if (target === 'setup') setView(VIEWS.SETUP);
+    else if (target === 'daily') setView(VIEWS.DAILY);
+    else if (target === 'flashcards') setView(VIEWS.FLASHCARDS);
+    else if (target === 'stats') setView(VIEWS.STATS);
+  }
+
   return (
-    <div className="app-shell">
-      <Header onHome={() => setView(VIEWS.HOME)} showHome={view !== VIEWS.HOME} />
+    <div className="layout">
+      <Sidebar
+        view={view}
+        onNavigate={handleNav}
+        stats={stats}
+        open={navOpen}
+        onClose={() => setNavOpen(false)}
+      />
 
-      <main className="app-main">
-        {view === VIEWS.HOME && (
-          <Home
-            stats={stats}
-            onStartPractice={() => setView(VIEWS.SETUP)}
-            onDaily={() => setView(VIEWS.DAILY)}
-            onFlashcards={() => setView(VIEWS.FLASHCARDS)}
-            onStats={() => setView(VIEWS.STATS)}
-          />
-        )}
+      <div className="content">
+        <Topbar
+          title={TITLES[view]}
+          onMenu={() => setNavOpen((o) => !o)}
+          onHome={() => setView(VIEWS.HOME)}
+          showHome={view !== VIEWS.HOME}
+        />
 
-        {view === VIEWS.SETUP && (
-          <QuizSetup onStart={startPractice} onCancel={() => setView(VIEWS.HOME)} />
-        )}
+        <main className="content-main">
+          {view === VIEWS.HOME && (
+            <Home
+              stats={stats}
+              onStartPractice={() => setView(VIEWS.SETUP)}
+              onDaily={() => setView(VIEWS.DAILY)}
+              onFlashcards={() => setView(VIEWS.FLASHCARDS)}
+              onStats={() => setView(VIEWS.STATS)}
+            />
+          )}
 
-        {view === VIEWS.QUIZ && quizConfig && (
-          <Quiz
-            config={quizConfig}
-            onFinish={finishQuiz}
-            onQuit={() => setView(VIEWS.HOME)}
-          />
-        )}
+          {view === VIEWS.SETUP && (
+            <QuizSetup onStart={startPractice} onCancel={() => setView(VIEWS.HOME)} />
+          )}
 
-        {view === VIEWS.RESULTS && lastResult && (
-          <Results
-            result={lastResult}
-            onRetry={() => {
-              if (lastResult.mode === 'daily') {
-                setView(VIEWS.DAILY);
-              } else {
-                setView(VIEWS.SETUP);
-              }
-            }}
-            onHome={() => setView(VIEWS.HOME)}
-          />
-        )}
+          {view === VIEWS.QUIZ && quizConfig && (
+            <Quiz
+              config={quizConfig}
+              onFinish={finishQuiz}
+              onQuit={() => setView(VIEWS.HOME)}
+            />
+          )}
 
-        {view === VIEWS.DAILY && (
-          <DailyChallenge onFinish={finishQuiz} onHome={() => setView(VIEWS.HOME)} />
-        )}
+          {view === VIEWS.RESULTS && lastResult && (
+            <Results
+              result={lastResult}
+              onRetry={() => {
+                if (lastResult.mode === 'daily') setView(VIEWS.DAILY);
+                else setView(VIEWS.SETUP);
+              }}
+              onHome={() => setView(VIEWS.HOME)}
+            />
+          )}
 
-        {view === VIEWS.FLASHCARDS && <Flashcards onHome={() => setView(VIEWS.HOME)} />}
+          {view === VIEWS.DAILY && (
+            <DailyChallenge onFinish={finishQuiz} onHome={() => setView(VIEWS.HOME)} />
+          )}
 
-        {view === VIEWS.STATS && (
-          <Stats
-            stats={stats}
-            onHome={() => setView(VIEWS.HOME)}
-            onReset={() => setStats(loadState())}
-          />
-        )}
-      </main>
+          {view === VIEWS.FLASHCARDS && <Flashcards onHome={() => setView(VIEWS.HOME)} />}
 
-      <footer className="app-footer">
-        <span>AP CSP Study Arena · built for studying · no backend</span>
-      </footer>
+          {view === VIEWS.STATS && (
+            <Stats
+              stats={stats}
+              onHome={() => setView(VIEWS.HOME)}
+              onReset={() => setStats(loadState())}
+            />
+          )}
+        </main>
+
+        <footer className="content-foot">
+          AP CSP Study Arena · saved locally · no backend
+        </footer>
+      </div>
     </div>
   );
 }
 
-function Header({ onHome, showHome }) {
+function Topbar({ title, onMenu, onHome, showHome }) {
   return (
-    <header className="app-header">
-      <div
-        className="brand"
-        onClick={onHome}
-        role="button"
-        tabIndex={0}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter' || e.key === ' ') onHome();
-        }}
-      >
-        <div className="brand-mark" aria-hidden="true">AP</div>
-        <div className="brand-text">
-          <div className="brand-title">AP CSP Study Arena</div>
-          <div className="brand-sub">Practice · Daily · Flashcards</div>
-        </div>
+    <header className="topbar">
+      <button className="menu-btn" onClick={onMenu} aria-label="Open navigation">
+        <span /><span /><span />
+      </button>
+      <div className="topbar-title">
+        <span className="topbar-eyebrow">AP CSP</span>
+        <span className="topbar-h">{title}</span>
       </div>
       {showHome && (
-        <button className="ghost-btn" onClick={onHome}>
-          ← Home
+        <button className="ghost-btn small" onClick={onHome}>
+          ← Overview
         </button>
       )}
     </header>

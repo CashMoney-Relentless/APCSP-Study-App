@@ -1,5 +1,7 @@
 import React from 'react';
 import { questions } from '../data/questions.js';
+import { flashcards } from '../data/flashcards.js';
+import { todaySeedString } from '../utils/random.js';
 
 export default function Home({ stats, onStartPractice, onDaily, onFlashcards, onStats }) {
   const accuracy =
@@ -7,79 +9,112 @@ export default function Home({ stats, onStartPractice, onDaily, onFlashcards, on
       ? Math.round((stats.totalCorrect / stats.totalQuestions) * 100)
       : 0;
 
+  const today = todaySeedString();
+  const dailyDone = stats.lastDailyDate === today;
+
   return (
     <section className="home">
-      <div className="hero">
-        <h1 className="hero-title">
-          AP CSP <span className="grad">Study Arena</span>
-        </h1>
-        <p className="hero-sub">
-          Sharpen your AP Computer Science Principles skills with quizzes,
-          flashcards, and a fresh daily challenge.
-        </p>
+      <div className="hero-card">
+        <div className="hero-text">
+          <div className="hero-eyebrow">
+            <span className="dot" /> Welcome back
+          </div>
+          <h1 className="hero-title">
+            Master <span className="accent">AP CSP</span><br />
+            one question at a time.
+          </h1>
+          <p className="hero-sub">
+            <span className="code-tag">&lt;study/&gt;</span> Practice quizzes, daily challenges,
+            and flashcards built around the official AP Computer Science Principles topics.
+          </p>
+          <div className="hero-actions">
+            <button className="primary-btn" onClick={onStartPractice}>
+              Start Practice
+            </button>
+            <button className="link-btn" onClick={onDaily}>
+              {dailyDone ? "Today's daily — done ✓" : "Today's daily challenge →"}
+            </button>
+          </div>
+        </div>
+        <div className="hero-side" aria-hidden="true">
+          <div className="hero-glyph">
+            <pre>{`PROCEDURE Study()\n{\n  WHILE (curious)\n  {\n    learn()\n    practice()\n  }\n}`}</pre>
+          </div>
+        </div>
       </div>
 
-      <div className="stat-row">
-        <StatPill label="Best Score" value={stats.bestScore} />
-        <StatPill label="Daily Streak" value={`${stats.dailyStreak}🔥`} />
-        <StatPill label="Questions Answered" value={stats.totalQuestions} />
-        <StatPill label="Avg Accuracy" value={`${accuracy}%`} />
+      <div className="metrics-row">
+        <Metric value={`${stats.bestScore}`} label="Best Score" />
+        <Metric value={`${stats.totalQuestions}`} label="Questions Answered" />
+        <Metric value={`${accuracy}%`} label="Avg Accuracy" />
+        <Metric value={`${stats.dailyStreak}`} label="Day Streak" highlight />
       </div>
 
-      <div className="action-grid">
-        <ActionCard
-          color="violet"
-          icon="🎯"
-          title="Start Practice"
-          desc="Choose 5, 10, or 20 questions. Random every time."
-          onClick={onStartPractice}
-        />
-        <ActionCard
-          color="cyan"
-          icon="📅"
-          title="Daily Challenge"
-          desc="Same 5 questions worldwide today. Build your streak."
-          onClick={onDaily}
-        />
-        <ActionCard
-          color="pink"
-          icon="🃏"
-          title="Flashcards"
-          desc="Vocabulary review. Flip, shuffle, mark as known."
-          onClick={onFlashcards}
-        />
-        <ActionCard
-          color="amber"
-          icon="📊"
-          title="Stats"
-          desc="Track your progress over time."
-          onClick={onStats}
-        />
+      <div className="services">
+        <div className="services-head">
+          <h2 className="services-title">Study Modes</h2>
+          <span className="services-meta">
+            {questions.length} questions · {flashcards.length} cards
+          </span>
+        </div>
+
+        <div className="services-grid">
+          <ServiceCard
+            tag="01"
+            title="Practice Quizzes"
+            desc="Choose 5, 10, or 20 questions. Question order and answer choices randomize every attempt so you never just memorize the position."
+            cta="Start Practice"
+            onClick={onStartPractice}
+          />
+          <ServiceCard
+            tag="02"
+            title="Daily Challenge"
+            desc="Five questions, seeded by today's date. Build a streak by completing one each day. Same set worldwide on the same date."
+            cta={dailyDone ? "Replay today" : "Begin today"}
+            onClick={onDaily}
+          />
+          <ServiceCard
+            tag="03"
+            title="Flashcards"
+            desc="Vocabulary review with flip animation, shuffle, and a known counter. Perfect quick warm-up before a quiz."
+            cta="Open deck"
+            onClick={onFlashcards}
+          />
+          <ServiceCard
+            tag="04"
+            title="Stats & Mastery"
+            desc="Track best score, accuracy, total questions answered, and per-topic mastery. All saved locally — no backend."
+            cta="View stats"
+            onClick={onStats}
+          />
+        </div>
       </div>
 
-      <div className="bank-note">
-        <strong>{questions.length}</strong> questions in the bank · easily expand
-        in <code>src/data/questions.js</code>.
+      <div className="footnote">
+        Easily expand the question bank in <code>src/data/questions.js</code>.
       </div>
     </section>
   );
 }
 
-function StatPill({ label, value }) {
+function Metric({ value, label, highlight }) {
   return (
-    <div className="stat-pill">
-      <div className="stat-pill-value">{value}</div>
-      <div className="stat-pill-label">{label}</div>
+    <div className={`metric ${highlight ? 'metric-highlight' : ''}`}>
+      <div className="metric-value">{value}</div>
+      <div className="metric-label">{label}</div>
     </div>
   );
 }
 
-function ActionCard({ icon, title, desc, color, onClick }) {
+function ServiceCard({ tag, title, desc, cta, onClick }) {
   return (
-    <button className={`action-card action-${color}`} onClick={onClick}>
-      <div className="action-icon" aria-hidden="true">{icon}</div>
-      <div className="action-title">{title}</div>
-      <div className="action-desc">{desc}</div>
-    </button>
+    <article className="service-card">
+      <div className="service-tag">{tag}</div>
+      <h3 className="service-title">{title}</h3>
+      <p className="service-desc">{desc}</p>
+      <button className="service-cta" onClick={onClick}>
+        {cta} <span aria-hidden="true">→</span>
+      </button>
+    </article>
   );
 }
