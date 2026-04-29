@@ -10,7 +10,7 @@ function gradeFor(pct) {
 const LETTERS = ['A', 'B', 'C', 'D', 'E', 'F'];
 
 export default function Results({ result, onRetry, onHome }) {
-  const { score, correct, total, accuracy, history, mode } = result;
+  const { score, correct, total, accuracy, history, mode, plan } = result;
   const grade = gradeFor(accuracy);
   const missed = history.filter((h) => !h.isCorrect);
 
@@ -33,6 +33,29 @@ export default function Results({ result, onRetry, onHome }) {
           Home
         </button>
       </div>
+
+      {plan && plan.adaptive && plan.usedTopics && (
+        <div className="plan-card">
+          <div className="plan-head">
+            <span className="plan-mode on">Adaptive plan used</span>
+            <span className="plan-reason">
+              Targeted {plan.targetCounts.weak} weak · {plan.targetCounts.medium} medium · {plan.targetCounts.strong} strong
+            </span>
+          </div>
+          <div className="class-row">
+            <span className="class-label">Topics</span>
+            <div className="class-tags">
+              {Object.entries(plan.usedTopics)
+                .sort((a, b) => b[1] - a[1])
+                .map(([t, n]) => (
+                  <span key={t} className="class-tag">
+                    {t} · {n}
+                  </span>
+                ))}
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="review-section">
         <h3 className="section-title">Review</h3>

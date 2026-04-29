@@ -8,41 +8,72 @@ import {
   sampleN,
   shuffle,
 } from '../utils/random.js';
-import { recordQuizResult, recordDailyCompletion } from '../utils/storage.js';
+import {
+  recordDailyCompletion,
+  updateState,
+} from '../utils/storage.js';
+import {
+  generateAdaptiveQuiz,
+  updateTopicStats,
+} from '../utils/adaptiveLearning.js';
 
-// Scoring constants (kept local so they're easy to tweak).
 const POINTS_CORRECT = 100;
 const STREAK_3_BONUS = 50;
 const STREAK_5_BONUS = 100;
 const HARD_BONUS = 50;
 
 export default function Quiz({ config, onFinish, onQuit }) {
-  const { length, mode = 'practice', topic = 'all', seedString, dateString } = config;
+  const {
+    length,
+    mode = 'practice',
+    topic = 'all',
+    seedString,
+    dateString,
+    adaptive = true,
+  } = config;
 
-  // Build a seeded RNG when seedString is provided (daily mode).
-  // Otherwise use Math.random for full randomness each attempt.
-  const rng = useMemo(() => {
+  // Seeded RNG only when a seedString is given (daily mode). The adaptive
+  // engine itself relies on Math.random for question variety so the same
+  // user doesn't see identical practice quizzes back-to-back.
+  const seededRng = useMemo(() => {
     if (seedString) return mulberry32(hashStringToSeed(seedString));
-    return Math.random;
+    return null;
   }, [seedString]);
 
-  const quizQuestions = useMemo(() => {
-    let pool = bank;
-    if (topic && topic !== 'all') {
-      pool = bank.filter((q) => q.topic === topic);
-      if (pool.length < length) pool = bank; // fallback if topic too small
+  const built = useMemo(() => {
+    if (seededRng) {
+      // Daily / seeded path: keep deterministic behavior, no adaptive bias.
+      let pool = bank;
+      if (topic && topic !== 'all') {
+        pool = bank.filter((q) => q.topic === topic);
+        if (pool.length < length) pool = bank;
+      }
+      const sampled = sampleN(pool, length, seededRng);
+      const ordered = shuffle(sampled, seededRng);
+      return {
+        questions: ordered.map((q) => randomizeQuestion(q, seededRng)),
+        plan: { adaptive: false, reason: 'seeded' },
+      };
     }
-    const sampled = sampleN(pool, length, rng);
-    const ordered = shuffle(sampled, rng);
-    return ordered.map((q) => randomizeQuestion(q, rng));
-  }, [length, topic, rng]);
+
+    const result = generateAdaptiveQuiz(bank, length, { adaptive, topic });
+    const rngForChoices = Math.random;
+    return {
+      questions: result.questions.map((q) => randomizeQuestion(q, rngForChoices)),
+      plan: result.plan,
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [length, topic, adaptive, seededRng]);
+
+  const quizQuestions = built.questions;
+  const plan = built.plan;
 
   const [index, setIndex] = useState(0);
   const [selected, setSelected] = useState(null);
   const [locked, setLocked] = useState(false);
   const [score, setScore] = useState(0);
   const [streak, setStreak] = useState(0);
-  const [history, setHistory] = useState([]); // { question, selected, isCorrect, points }
+  const [history, setHistory] = useState([]);
 
   const current = quizQuestions[index];
 
@@ -71,15 +102,21 @@ export default function Quiz({ config, onFinish, onQuit }) {
       ...h,
       { question: current, selected: i, isCorrect, points: earned },
     ]);
+
+    // Live per-answer topic update — for non-daily modes only, so the
+    // very next quiz reflects the latest performance. Daily uses the
+    // batch update at completion to keep "already played today" gating.
+    if (mode !== 'daily') {
+      updateTopicStats(current.topic, isCorrect);
+    }
   }
 
   function handleNext() {
     if (!locked) return;
     if (index + 1 >= quizQuestions.length) {
-      // Finalize
       const correct = history.filter((h) => h.isCorrect).length;
       const total = quizQuestions.length;
-      const finalScore = score; // history already includes the just-locked question
+      const finalScore = score;
       const result = {
         score: finalScore,
         correct,
@@ -88,6 +125,7 @@ export default function Quiz({ config, onFinish, onQuit }) {
         history,
         mode,
         dateString,
+        plan,
       };
 
       if (mode === 'daily' && dateString) {
@@ -99,7 +137,19 @@ export default function Quiz({ config, onFinish, onQuit }) {
           history,
         });
       } else {
-        recordQuizResult({ score: finalScore, correct, total, history });
+        // Topic stats already applied live; record aggregate score and
+        // remember which question ids were used (history-aware).
+        updateState((s) => ({
+          ...s,
+          bestScore: Math.max(s.bestScore, finalScore),
+          totalQuizzes: s.totalQuizzes + 1,
+          totalQuestions: s.totalQuestions + total,
+          totalCorrect: s.totalCorrect + correct,
+          recentQuestionIds: [
+            ...(s.recentQuestionIds || []),
+            ...history.map((h) => h.question.id),
+          ].slice(-24),
+        }));
       }
 
       onFinish(result);
@@ -110,7 +160,6 @@ export default function Quiz({ config, onFinish, onQuit }) {
     setLocked(false);
   }
 
-  // Keyboard shortcuts: 1-4 to pick, Enter to advance.
   useEffect(() => {
     function onKey(e) {
       if (e.key >= '1' && e.key <= '6') {
@@ -124,7 +173,18 @@ export default function Quiz({ config, onFinish, onQuit }) {
     return () => window.removeEventListener('keydown', onKey);
   });
 
-  if (!current) return null;
+  if (!current) {
+    return (
+      <section className="quiz">
+        <div className="question-card">
+          <div className="question-text">No questions available for this configuration.</div>
+          <div className="quiz-actions">
+            <button className="ghost-btn" onClick={onQuit}>Back</button>
+          </div>
+        </div>
+      </section>
+    );
+  }
 
   const progressPct = Math.round(((index + (locked ? 1 : 0)) / quizQuestions.length) * 100);
 
@@ -141,6 +201,11 @@ export default function Quiz({ config, onFinish, onQuit }) {
         </div>
 
         <div className="quiz-stats">
+          {plan?.adaptive && (
+            <div className="adaptive-badge" title="Adaptive: weighted toward your weak topics">
+              ⚡ Adaptive
+            </div>
+          )}
           <div className="quiz-score" title="Live score">
             <span className="quiz-score-num">{score}</span>
             <span className="quiz-score-label">pts</span>

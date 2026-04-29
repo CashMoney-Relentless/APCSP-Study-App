@@ -7,8 +7,8 @@ mixes the energy of Quizlet, Kahoot, and Wordle. Built with React + Vite.
 
 ## Features
 
-- **Home Dashboard** — best score, daily streak, total questions answered, average accuracy.
-- **Practice Mode** — pick **Short (5)**, **Medium (10)**, or **Long (20)** quizzes; questions and answer choices are randomized every attempt; topic focus selector.
+- **Home Dashboard** — best score, daily streak, total questions answered, average accuracy, and an Adaptive "next quiz focus" recommendation.
+- **Adaptive Practice** — quizzes are *actually* weighted toward the topics you struggle with. Distribution: **60% weak / 30% medium / 10% strong**. Toggle on/off in the setup screen.
 - **Daily Challenge** — 5 questions seeded by the current date so everyone gets the same daily set; tracks a streak.
 - **Flashcards** — flip, next/back, shuffle, mark-as-known with persistent counts.
 - **Stats Page** — best score, total quizzes, total questions, total correct, average accuracy, daily streak, last daily date, full reset.
@@ -56,9 +56,48 @@ src/
     questions.js      <-- 60+ AP CSP questions (edit / add here)
     flashcards.js     <-- 30 vocab cards (edit / add here)
   utils/
-    random.js         <-- seeded RNG, shuffle, randomizeQuestion
-    storage.js        <-- localStorage wrapper
+    random.js            <-- seeded RNG, shuffle, randomizeQuestion
+    storage.js           <-- localStorage wrapper, per-topic mastery
+    adaptiveLearning.js  <-- weighted topic selection engine
 ```
+
+## Adaptive engine (how it picks questions)
+
+Every answer updates a per-topic record in `localStorage`:
+
+```ts
+{
+  attempts, correct, incorrect, accuracy,
+  recentIncorrectCount, lastPracticed,
+  recentResults: [1, 0, 1, ...]   // last 20 answers
+}
+```
+
+When you start a quiz, `generateAdaptiveQuiz(bank, length)`:
+
+1. Reads topic stats from `localStorage`.
+2. Classifies each topic with at least 3 attempts:
+   - **0–50% accuracy → weak**
+   - **51–75% → medium**
+   - **76–100% → strong**
+3. Computes target counts as **60% weak / 30% medium / 10% strong** of `length`.
+   (Buckets that have no qualifying topics collapse and their share is redistributed.)
+4. Within each bucket, topics are picked with extra weight when accuracy is
+   lower or there are recent incorrect answers, so the *worst* weak topic
+   shows up most.
+5. Avoids re-using questions you've seen in the last ~24 picks (tracked as
+   `recentQuestionIds`). Falls back gracefully if the bank runs out.
+6. Final order is shuffled and answer choices randomized per question.
+
+If you have fewer than 8 total answered questions, the engine returns a
+balanced random quiz so the algorithm doesn't over-fit a tiny sample. The
+exposed API in `src/utils/adaptiveLearning.js` is:
+
+- `getTopicStats()` — full topic stats map
+- `updateTopicStats(topic, isCorrect)` — single answer update (called live by Quiz)
+- `classifyTopics()` — `{ weak, medium, strong, unseen }`
+- `generateAdaptiveQuiz(bank, length, opts)` — `{ questions, plan }`
+- `getRecommendedTopics(limit)` — sorted recommendations for the UI
 
 ## Adding more questions
 

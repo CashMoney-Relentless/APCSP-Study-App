@@ -2,6 +2,7 @@ import React from 'react';
 import { questions } from '../data/questions.js';
 import { flashcards } from '../data/flashcards.js';
 import { todaySeedString } from '../utils/random.js';
+import { getRecommendedTopics } from '../utils/adaptiveLearning.js';
 
 export default function Home({ stats, onStartPractice, onDaily, onFlashcards, onStats }) {
   const accuracy =
@@ -11,6 +12,8 @@ export default function Home({ stats, onStartPractice, onDaily, onFlashcards, on
 
   const today = todaySeedString();
   const dailyDone = stats.lastDailyDate === today;
+  const recs = getRecommendedTopics(4);
+  const hasRecs = recs.some((r) => r.attempts >= 3);
 
   return (
     <section className="home">
@@ -42,6 +45,25 @@ export default function Home({ stats, onStartPractice, onDaily, onFlashcards, on
           </div>
         </div>
       </div>
+
+      {hasRecs && (
+        <div className="plan-card">
+          <div className="plan-head">
+            <span className="plan-mode on">Adaptive · next quiz focus</span>
+            <button className="link-btn" onClick={onStartPractice}>Start a quiz →</button>
+          </div>
+          <div className="plan-recs-row">
+            {recs.map((r) => (
+              <span key={r.topic} className={`rec-chip rec-${r.reason}`}>
+                {r.topic}
+                <span className="rec-meta">
+                  {r.attempts > 0 ? `${r.accuracy}%` : 'new'}
+                </span>
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="metrics-row">
         <Metric value={`${stats.bestScore}`} label="Best Score" />
