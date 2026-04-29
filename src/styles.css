@@ -1,0 +1,117 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ---- Base & global ---- */
+@layer base {
+  html, body, #root { height: 100%; }
+  body {
+    font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background-color: #ffffff;
+  }
+  ::selection { background: #d6e7ff; color: #0a3478; }
+}
+
+@layer components {
+  .btn-primary {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl bg-brand-500 px-5 py-3
+           text-sm font-semibold text-white shadow-soft transition
+           hover:bg-brand-600 hover:shadow-pop active:translate-y-px
+           disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+  .btn-ghost {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl border border-ink-200 bg-white
+           px-4 py-2.5 text-sm font-medium text-ink-700 transition
+           hover:border-brand-300 hover:text-brand-700 hover:bg-brand-50
+           disabled:opacity-50;
+  }
+  .btn-danger {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl border border-bad-500/40 bg-white
+           px-4 py-2.5 text-sm font-medium text-bad-600 transition hover:bg-bad-500/10;
+  }
+  .card {
+    @apply rounded-2xl border border-ink-100 bg-white shadow-soft;
+  }
+  .card-dark {
+    @apply rounded-2xl bg-ink-900 text-white shadow-card;
+  }
+  .pill {
+    @apply inline-flex items-center gap-1.5 rounded-full border border-ink-200 bg-white px-2.5 py-1
+           text-xs font-medium text-ink-700;
+  }
+  .pill-blue {
+    @apply inline-flex items-center gap-1.5 rounded-full border border-brand-200 bg-brand-50 px-2.5 py-1
+           text-xs font-semibold text-brand-700;
+  }
+  .pill-green {
+    @apply inline-flex items-center gap-1.5 rounded-full border border-good-500/40 bg-good-500/10 px-2.5 py-1
+           text-xs font-semibold text-good-600;
+  }
+  .pill-red {
+    @apply inline-flex items-center gap-1.5 rounded-full border border-bad-500/40 bg-bad-500/10 px-2.5 py-1
+           text-xs font-semibold text-bad-600;
+  }
+  .pill-amber {
+    @apply inline-flex items-center gap-1.5 rounded-full border border-amber-300/60 bg-amber-50 px-2.5 py-1
+           text-xs font-semibold text-amber-700;
+  }
+  .input-base {
+    @apply w-full rounded-xl border border-ink-200 bg-white px-3 py-2 text-sm text-ink-900
+           placeholder:text-ink-400 focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-200;
+  }
+  .code-block {
+    @apply rounded-xl border border-ink-200 bg-ink-900 text-ink-50 px-4 py-3 font-mono text-[13.5px]
+           leading-relaxed overflow-x-auto whitespace-pre;
+  }
+  .section-title {
+    @apply flex items-center gap-2 text-lg font-bold text-ink-900;
+  }
+  .section-title::before {
+    content: '';
+    @apply inline-block h-5 w-1.5 rounded bg-brand-500;
+  }
+
+  /* Choice button states (used by quizzes & games) */
+  .choice {
+    @apply flex w-full items-center gap-3 rounded-xl border border-ink-200 bg-white px-4 py-3 text-left
+           text-sm font-medium text-ink-800 transition
+           hover:border-brand-300 hover:bg-brand-50;
+  }
+  .choice-letter {
+    @apply inline-grid h-7 w-7 place-items-center rounded-md border border-ink-200 bg-ink-50
+           font-bold text-ink-500;
+  }
+  .choice.is-selected {
+    @apply border-brand-400 bg-brand-50;
+  }
+  .choice.is-selected .choice-letter {
+    @apply bg-brand-500 text-white border-brand-500;
+  }
+  .choice.is-correct {
+    @apply border-good-500 bg-good-500/10 text-good-600 animate-pop-in;
+  }
+  .choice.is-correct .choice-letter {
+    @apply bg-good-500 text-white border-good-500;
+  }
+  .choice.is-wrong {
+    @apply border-bad-500 bg-bad-500/10 text-bad-600 animate-shake;
+  }
+  .choice.is-wrong .choice-letter {
+    @apply bg-bad-500 text-white border-bad-500;
+  }
+  .choice.is-faded {
+    @apply opacity-50;
+  }
+
+  .progress-track {
+    @apply h-2 w-full overflow-hidden rounded-full bg-ink-100;
+  }
+  .progress-fill {
+    @apply h-full rounded-full bg-brand-500 transition-[width] duration-500 ease-out;
+  }
+}
+
+/* Scrollbar polish for dark surfaces */
+.scroll-thin::-webkit-scrollbar { width: 8px; height: 8px; }
+.scroll-thin::-webkit-scrollbar-thumb { background: rgba(15, 91, 224, 0.25); border-radius: 9999px; }
+.scroll-thin::-webkit-scrollbar-track { background: transparent; }
