@@ -2,73 +2,47 @@ import React, { useEffect, useMemo, useState } from 'react';
 import QuestionCard from './QuestionCard.jsx';
 import { questions as bank } from '../data/questions.js';
 import {
-  mulberry32, hashStringToSeed, randomizeQuestion, sampleN, shuffle,
-} from '../utils/seededRandom.js';
-import {
-  recordDailyFinish, recordQuizFinish, updateState,
-} from '../utils/storage.js';
-import {
-  generateAdaptiveQuiz, recordAnswer,
-} from '../utils/adaptiveLearning.js';
-import { POINTS, scoreAnswer } from '../utils/scoring.js';
+  mulberry32,
+  hashStringToSeed,
+  randomizeQuestion,
+  sampleN,
+  shuffle,
+} from '../utils/random.js';
+import { recordQuizResult, recordDailyCompletion } from '../utils/storage.js';
+
+// Scoring constants (kept local so they're easy to tweak).
+const POINTS_CORRECT = 100;
+const STREAK_3_BONUS = 50;
+const STREAK_5_BONUS = 100;
+const HARD_BONUS = 50;
 
 export default function Quiz({ config, onFinish, onQuit }) {
-  const {
-    length,
-    mode = 'practice',
-    topic = 'all',
-    seedString,
-    dateString,
-    adaptive = true,
-    lives: livesStart = null,
-    showInstantFeedback = true,
-    topicSubset = null,
-  } = config;
+  const { length, mode = 'practice', topic = 'all', seedString, dateString } = config;
 
-  // Seeded RNG only for the daily challenge.
-  const seededRng = useMemo(() => {
+  // Build a seeded RNG when seedString is provided (daily mode).
+  // Otherwise use Math.random for full randomness each attempt.
+  const rng = useMemo(() => {
     if (seedString) return mulberry32(hashStringToSeed(seedString));
-    return null;
+    return Math.random;
   }, [seedString]);
 
-  // Build the quiz once per config.
-  const built = useMemo(() => {
-    if (seededRng) {
-      let pool = bank;
-      if (topic && topic !== 'all') {
-        pool = bank.filter((q) => q.topic === topic);
-        if (pool.length < length) pool = bank;
-      }
-      const sampled = sampleN(pool, length, seededRng);
-      const ordered = shuffle(sampled, seededRng);
-      return {
-        questions: ordered.map((q) => randomizeQuestion(q, seededRng)),
-        plan: { adaptive: false, reason: 'seeded' },
-      };
+  const quizQuestions = useMemo(() => {
+    let pool = bank;
+    if (topic && topic !== 'all') {
+      pool = bank.filter((q) => q.topic === topic);
+      if (pool.length < length) pool = bank; // fallback if topic too small
     }
-    const opts = { adaptive, topic };
-    if (Array.isArray(topicSubset) && topicSubset.length > 0) {
-      opts.topics = topicSubset;
-    }
-    const r = generateAdaptiveQuiz(bank, length, opts);
-    return {
-      questions: r.questions.map((q) => randomizeQuestion(q, Math.random)),
-      plan: r.plan,
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [length, topic, adaptive, seededRng, topicSubset && topicSubset.join(',')]);
-
-  const quizQuestions = built.questions;
-  const plan = built.plan;
+    const sampled = sampleN(pool, length, rng);
+    const ordered = shuffle(sampled, rng);
+    return ordered.map((q) => randomizeQuestion(q, rng));
+  }, [length, topic, rng]);
 
   const [index, setIndex] = useState(0);
   const [selected, setSelected] = useState(null);
   const [locked, setLocked] = useState(false);
   const [score, setScore] = useState(0);
-  const [pointsEarned, setPointsEarned] = useState(0);
   const [streak, setStreak] = useState(0);
-  const [history, setHistory] = useState([]);
-  const [lives, setLives] = useState(livesStart);
+  const [history, setHistory] = useState([]); // { question, selected, isCorrect, points }
 
   const current = quizQuestions[index];
 
@@ -76,46 +50,59 @@ export default function Quiz({ config, onFinish, onQuit }) {
     if (locked) return;
     setSelected(i);
     setLocked(true);
-    const isCorrect = i === current.correctAnswer;
 
-    const { earned, nextStreak } = scoreAnswer({
-      isCorrect, difficulty: current.difficulty, prevStreak: streak,
-    });
+    const isCorrect = i === current.correctAnswer;
+    let earned = 0;
+    let nextStreak = streak;
+
+    if (isCorrect) {
+      earned += POINTS_CORRECT;
+      if (current.difficulty === 'hard') earned += HARD_BONUS;
+      nextStreak = streak + 1;
+      if (nextStreak > 0 && nextStreak % 5 === 0) earned += STREAK_5_BONUS;
+      else if (nextStreak > 0 && nextStreak % 3 === 0) earned += STREAK_3_BONUS;
+    } else {
+      nextStreak = 0;
+    }
+
     setScore((s) => s + earned);
-    setPointsEarned((p) => p + earned);
     setStreak(nextStreak);
     setHistory((h) => [
       ...h,
       { question: current, selected: i, isCorrect, points: earned },
     ]);
-
-    // Live updates: topic stats + spaced rep (skip stat updates for daily replay).
-    if (mode !== 'daily-replay') {
-      recordAnswer({ question: current, isCorrect, mode });
-    }
-
-    if (livesStart != null && !isCorrect) {
-      const remaining = lives - 1;
-      setLives(remaining);
-      if (remaining <= 0) {
-        // Survival: end immediately on next tick.
-        setTimeout(() => finalizeQuiz([
-          ...history,
-          { question: current, selected: i, isCorrect, points: earned },
-        ], score + earned, pointsEarned + earned), 600);
-      }
-    }
-
-    // Drill mode: auto-advance after a short pause.
-    if (!showInstantFeedback) {
-      setTimeout(() => advance(), 350);
-    }
   }
 
-  function advance(forced = false) {
-    if (!forced && !locked) return;
+  function handleNext() {
+    if (!locked) return;
     if (index + 1 >= quizQuestions.length) {
-      finalizeQuiz(history.length === quizQuestions.length ? history : history, score, pointsEarned);
+      // Finalize
+      const correct = history.filter((h) => h.isCorrect).length;
+      const total = quizQuestions.length;
+      const finalScore = score; // history already includes the just-locked question
+      const result = {
+        score: finalScore,
+        correct,
+        total,
+        accuracy: total > 0 ? Math.round((correct / total) * 100) : 0,
+        history,
+        mode,
+        dateString,
+      };
+
+      if (mode === 'daily' && dateString) {
+        recordDailyCompletion({
+          score: finalScore,
+          correct,
+          total,
+          dateString,
+          history,
+        });
+      } else {
+        recordQuizResult({ score: finalScore, correct, total, history });
+      }
+
+      onFinish(result);
       return;
     }
     setIndex((i) => i + 1);
@@ -123,51 +110,7 @@ export default function Quiz({ config, onFinish, onQuit }) {
     setLocked(false);
   }
 
-  function finalizeQuiz(finalHistory, finalScore, finalPoints) {
-    const total = finalHistory.length;
-    const correct = finalHistory.filter((h) => h.isCorrect).length;
-    const accuracy = total > 0 ? Math.round((correct / total) * 100) : 0;
-    const result = {
-      score: finalScore,
-      pointsEarned: finalPoints,
-      correct,
-      total,
-      accuracy,
-      history: finalHistory,
-      mode,
-      dateString,
-      plan,
-      lives,
-    };
-
-    if (mode === 'daily' && dateString) {
-      recordDailyFinish({
-        score: finalScore, correct, total, dateString, history: finalHistory,
-        pointsEarned: finalPoints + POINTS.DAILY_CHALLENGE_BONUS,
-      });
-    } else if (mode !== 'daily-replay') {
-      recordQuizFinish({
-        score: finalScore, correct, total,
-        history: finalHistory, pointsEarned: finalPoints, mode,
-      });
-    } else {
-      // daily-replay: still remember ids so we don't show the same in the
-      // very next quiz.
-      updateState((s) => ({
-        ...s,
-        recentQuestionIds: [
-          ...(s.recentQuestionIds || []),
-          ...finalHistory.map((h) => h.question.id),
-        ].slice(-36),
-      }));
-    }
-
-    onFinish(result);
-  }
-
-  function handleNext() { advance(); }
-
-  // Keyboard shortcuts: 1-4 pick, Enter advance.
+  // Keyboard shortcuts: 1-4 to pick, Enter to advance.
   useEffect(() => {
     function onKey(e) {
       if (e.key >= '1' && e.key <= '6') {
@@ -181,41 +124,33 @@ export default function Quiz({ config, onFinish, onQuit }) {
     return () => window.removeEventListener('keydown', onKey);
   });
 
-  if (!current) {
-    return (
-      <div className="card p-6 text-center">
-        <p className="text-ink-700">No questions available for this configuration.</p>
-        <button className="btn-ghost mt-3" onClick={onQuit}>Back</button>
-      </div>
-    );
-  }
+  if (!current) return null;
 
   const progressPct = Math.round(((index + (locked ? 1 : 0)) / quizQuestions.length) * 100);
 
   return (
-    <div className="space-y-4 animate-fade-up">
-      <div className="card flex flex-wrap items-center gap-4 px-4 py-3 sm:px-6">
-        <div className="flex-1 min-w-[200px]">
-          <div className="progress-track"><div className="progress-fill" style={{ width: `${progressPct}%` }} /></div>
-          <div className="mt-1.5 text-xs uppercase tracking-wider text-ink-400">
+    <section className="quiz">
+      <div className="quiz-topbar">
+        <div className="quiz-progress">
+          <div className="progress-bar">
+            <div className="progress-fill" style={{ width: `${progressPct}%` }} />
+          </div>
+          <div className="progress-label">
             {index + 1} of {quizQuestions.length}
           </div>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          {plan?.adaptive && <span className="pill-blue">⚡ Adaptive</span>}
-          {mode === 'survival' && (
-            <span className="pill-red">
-              {'❤'.repeat(Math.max(0, lives))}{lives < (livesStart || 0) ? '🤍'.repeat((livesStart || 0) - lives) : ''}
-            </span>
-          )}
-          {mode === 'drill' && <span className="pill-amber">drill</span>}
-          {mode === 'focus' && <span className="pill-blue">focus</span>}
-          <span className="pill">
-            <span className="text-ink-400">pts</span>
-            <span className="text-base font-bold text-brand-700">{score}</span>
-          </span>
-          <span className={`pill ${streak >= 3 ? 'pill-amber' : ''}`}>🔥 {streak}</span>
-          <button className="btn-ghost" onClick={onQuit}>Quit</button>
+
+        <div className="quiz-stats">
+          <div className="quiz-score" title="Live score">
+            <span className="quiz-score-num">{score}</span>
+            <span className="quiz-score-label">pts</span>
+          </div>
+          <div className={`quiz-streak ${streak >= 3 ? 'on-fire' : ''}`} title="Streak">
+            🔥 {streak}
+          </div>
+          <button className="ghost-btn small" onClick={onQuit}>
+            Quit
+          </button>
         </div>
       </div>
 
@@ -225,15 +160,18 @@ export default function Quiz({ config, onFinish, onQuit }) {
         total={quizQuestions.length}
         selectedIndex={selected}
         isLocked={locked}
-        showFeedback={showInstantFeedback}
         onSelect={handleSelect}
       />
 
-      <div className="flex justify-end">
-        <button className="btn-primary" disabled={!locked} onClick={handleNext}>
+      <div className="quiz-actions">
+        <button
+          className="primary-btn"
+          disabled={!locked}
+          onClick={handleNext}
+        >
           {index + 1 >= quizQuestions.length ? 'See results' : 'Next →'}
         </button>
       </div>
-    </div>
+    </section>
   );
 }

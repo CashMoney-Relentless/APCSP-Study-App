@@ -1,38 +1,32 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import Layout from './components/Layout.jsx';
-import Dashboard from './components/Dashboard.jsx';
+import React, { useEffect, useState } from 'react';
+import Sidebar from './components/Sidebar.jsx';
+import Home from './components/Home.jsx';
 import QuizSetup from './components/QuizSetup.jsx';
 import Quiz from './components/Quiz.jsx';
 import Results from './components/Results.jsx';
 import DailyChallenge from './components/DailyChallenge.jsx';
-import ExamSimulation from './components/ExamSimulation.jsx';
 import Flashcards from './components/Flashcards.jsx';
 import Stats from './components/Stats.jsx';
-import MiniGames from './components/MiniGames.jsx';
 import { loadState } from './utils/storage.js';
 
 const VIEWS = {
   HOME: 'home',
-  PRACTICE_SETUP: 'practice-setup',
+  SETUP: 'setup',
   QUIZ: 'quiz',
   RESULTS: 'results',
   DAILY: 'daily',
-  EXAM: 'exam',
   FLASHCARDS: 'flashcards',
   STATS: 'stats',
-  GAMES: 'games',
 };
 
 const TITLES = {
-  home: 'Dashboard',
-  'practice-setup': 'Practice Setup',
-  quiz: 'Quiz',
+  home: 'Overview',
+  setup: 'Practice',
+  quiz: 'Practice',
   results: 'Results',
   daily: 'Daily Challenge',
-  exam: 'Exam Simulation',
   flashcards: 'Flashcards',
   stats: 'Stats',
-  games: 'Mini Games',
 };
 
 export default function App() {
@@ -40,29 +34,14 @@ export default function App() {
   const [stats, setStats] = useState(loadState());
   const [quizConfig, setQuizConfig] = useState(null);
   const [lastResult, setLastResult] = useState(null);
+  const [navOpen, setNavOpen] = useState(false);
 
-  // Refresh stats whenever we land on a view that displays them.
   useEffect(() => {
-    if ([VIEWS.HOME, VIEWS.STATS, VIEWS.FLASHCARDS, VIEWS.GAMES, VIEWS.RESULTS].includes(view)) {
-      setStats(loadState());
-    }
+    setStats(loadState());
   }, [view]);
 
-  const navItems = useMemo(
-    () => [
-      { id: VIEWS.HOME,            label: 'Dashboard', icon: '◇' },
-      { id: VIEWS.PRACTICE_SETUP,  label: 'Practice',  icon: '◎' },
-      { id: VIEWS.DAILY,           label: 'Daily',     icon: '✦' },
-      { id: VIEWS.EXAM,            label: 'Exam Sim',  icon: '⌛' },
-      { id: VIEWS.FLASHCARDS,      label: 'Flashcards',icon: '▤' },
-      { id: VIEWS.GAMES,           label: 'Mini Games',icon: '⚡' },
-      { id: VIEWS.STATS,           label: 'Stats',     icon: '◢' },
-    ],
-    []
-  );
-
-  function startQuiz(config) {
-    setQuizConfig({ ...config, mode: config.mode || 'practice' });
+  function startPractice(config) {
+    setQuizConfig({ ...config, mode: 'practice' });
     setView(VIEWS.QUIZ);
   }
 
@@ -72,84 +51,104 @@ export default function App() {
     setView(VIEWS.RESULTS);
   }
 
-  function handleNavigate(target, payload) {
-    if (target === VIEWS.QUIZ && payload) {
-      startQuiz(payload);
-      return;
-    }
-    setView(target);
+  function handleNav(target) {
+    if (target === 'home') setView(VIEWS.HOME);
+    else if (target === 'setup') setView(VIEWS.SETUP);
+    else if (target === 'daily') setView(VIEWS.DAILY);
+    else if (target === 'flashcards') setView(VIEWS.FLASHCARDS);
+    else if (target === 'stats') setView(VIEWS.STATS);
   }
 
   return (
-    <Layout
-      navItems={navItems}
-      activeId={mapViewToNav(view)}
-      onNavigate={handleNavigate}
-      title={TITLES[view]}
-      stats={stats}
-    >
-      {view === VIEWS.HOME && (
-        <Dashboard
-          stats={stats}
-          onNavigate={handleNavigate}
-        />
-      )}
+    <div className="layout">
+      <Sidebar
+        view={view}
+        onNavigate={handleNav}
+        stats={stats}
+        open={navOpen}
+        onClose={() => setNavOpen(false)}
+      />
 
-      {view === VIEWS.PRACTICE_SETUP && (
-        <QuizSetup onStart={startQuiz} onCancel={() => setView(VIEWS.HOME)} />
-      )}
-
-      {view === VIEWS.QUIZ && quizConfig && (
-        <Quiz
-          config={quizConfig}
-          onFinish={finishQuiz}
-          onQuit={() => setView(VIEWS.HOME)}
-        />
-      )}
-
-      {view === VIEWS.RESULTS && lastResult && (
-        <Results
-          result={lastResult}
-          onRetry={() => {
-            if (lastResult.mode === 'daily') setView(VIEWS.DAILY);
-            else if (lastResult.mode === 'exam') setView(VIEWS.EXAM);
-            else setView(VIEWS.PRACTICE_SETUP);
-          }}
+      <div className="content">
+        <Topbar
+          title={TITLES[view]}
+          onMenu={() => setNavOpen((o) => !o)}
           onHome={() => setView(VIEWS.HOME)}
-          onPractice={() => setView(VIEWS.PRACTICE_SETUP)}
-          onGames={() => setView(VIEWS.GAMES)}
+          showHome={view !== VIEWS.HOME}
         />
-      )}
 
-      {view === VIEWS.DAILY && (
-        <DailyChallenge onFinish={finishQuiz} onHome={() => setView(VIEWS.HOME)} />
-      )}
+        <main className="content-main">
+          {view === VIEWS.HOME && (
+            <Home
+              stats={stats}
+              onStartPractice={() => setView(VIEWS.SETUP)}
+              onDaily={() => setView(VIEWS.DAILY)}
+              onFlashcards={() => setView(VIEWS.FLASHCARDS)}
+              onStats={() => setView(VIEWS.STATS)}
+            />
+          )}
 
-      {view === VIEWS.EXAM && (
-        <ExamSimulation onFinish={finishQuiz} onHome={() => setView(VIEWS.HOME)} />
-      )}
+          {view === VIEWS.SETUP && (
+            <QuizSetup onStart={startPractice} onCancel={() => setView(VIEWS.HOME)} />
+          )}
 
-      {view === VIEWS.FLASHCARDS && <Flashcards onHome={() => setView(VIEWS.HOME)} />}
+          {view === VIEWS.QUIZ && quizConfig && (
+            <Quiz
+              config={quizConfig}
+              onFinish={finishQuiz}
+              onQuit={() => setView(VIEWS.HOME)}
+            />
+          )}
 
-      {view === VIEWS.STATS && (
-        <Stats
-          stats={stats}
-          onHome={() => setView(VIEWS.HOME)}
-          onReset={() => setStats(loadState())}
-          onPractice={() => setView(VIEWS.PRACTICE_SETUP)}
-          onGames={() => setView(VIEWS.GAMES)}
-        />
-      )}
+          {view === VIEWS.RESULTS && lastResult && (
+            <Results
+              result={lastResult}
+              onRetry={() => {
+                if (lastResult.mode === 'daily') setView(VIEWS.DAILY);
+                else setView(VIEWS.SETUP);
+              }}
+              onHome={() => setView(VIEWS.HOME)}
+            />
+          )}
 
-      {view === VIEWS.GAMES && (
-        <MiniGames stats={stats} onHome={() => setView(VIEWS.HOME)} onRefresh={() => setStats(loadState())} />
-      )}
-    </Layout>
+          {view === VIEWS.DAILY && (
+            <DailyChallenge onFinish={finishQuiz} onHome={() => setView(VIEWS.HOME)} />
+          )}
+
+          {view === VIEWS.FLASHCARDS && <Flashcards onHome={() => setView(VIEWS.HOME)} />}
+
+          {view === VIEWS.STATS && (
+            <Stats
+              stats={stats}
+              onHome={() => setView(VIEWS.HOME)}
+              onReset={() => setStats(loadState())}
+            />
+          )}
+        </main>
+
+        <footer className="content-foot">
+          AP CSP Study Arena · saved locally · no backend
+        </footer>
+      </div>
+    </div>
   );
 }
 
-function mapViewToNav(view) {
-  if (view === 'quiz') return 'practice-setup';
-  if (view === 'results') return 'home';
-  return view;
+function Topbar({ title, onMenu, onHome, showHome }) {
+  return (
+    <header className="topbar">
+      <button className="menu-btn" onClick={onMenu} aria-label="Open navigation">
+        <span /><span /><span />
+      </button>
+      <div className="topbar-title">
+        <span className="topbar-eyebrow">AP CSP</span>
+        <span className="topbar-h">{title}</span>
+      </div>
+      {showHome && (
+        <button className="ghost-btn small" onClick={onHome}>
+          ← Overview
+        </button>
+      )}
+    </header>
+  );
 }
